@@ -17,9 +17,8 @@ router.post('/generate', async (req, res) => {
   if (!humanImage) return res.status(400).json({ error: true, message: 'Please upload your photo first.' });
   if (!garmentImage) return res.status(400).json({ error: true, message: 'Please select an outfit.' });
 
-  // Set a 4-minute server timeout
+  // Extend socket timeout for long-running HF requests (4 min)
   req.socket.setTimeout(240000);
-  res.setTimeout(240000);
 
   try {
     console.log('\n📸 New generation request — running synchronously...');
