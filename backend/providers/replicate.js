@@ -1,10 +1,8 @@
 import Replicate from 'replicate';
 import { base64ToBuffer } from '../utils/imageProcessor.js';
 
-// Use replicate.run() with model name — no hardcoded version hash needed
-const MODEL = 'cuuupid/idm-vton';
-
 let client = null;
+let cachedVersionId = null; // Cache the version so we only fetch it once
 
 function getClient() {
   if (!client) {
@@ -18,6 +16,18 @@ function getClient() {
   return client;
 }
 
+/**
+ * Fetch and cache the latest version ID for the model
+ */
+async function getLatestVersionId() {
+  if (cachedVersionId) return cachedVersionId;
+  const replicate = getClient();
+  const model = await replicate.models.get('cuuupid', 'idm-vton');
+  cachedVersionId = model.latest_version?.id;
+  console.log(`📌 Using Replicate model version: ${cachedVersionId?.substring(0, 16)}...`);
+  return cachedVersionId;
+}
+
 function prepareImageInput(image) {
   if (image && image.startsWith('data:')) {
     return base64ToBuffer(image);
@@ -26,24 +36,26 @@ function prepareImageInput(image) {
 }
 
 /**
- * Create prediction using replicate.run() — fires and returns immediately.
- * We wrap it so the background job resolves to output.
+ * Create a new virtual try-on prediction via Replicate
  */
 export async function createPrediction({ humanImage, garmentImage, garmentDescription, category }) {
   const replicate = getClient();
 
-  console.log('🚀 Creating Replicate prediction via run()...');
+  console.log('🚀 Creating Replicate prediction...');
   console.log(`   Category: ${category}`);
 
-  // replicate.predictions.create with model (no version) — async job
+  // Get the real version hash (fetched once, then cached)
+  const versionId = await getLatestVersionId();
+  if (!versionId) throw new Error('Could not find Replicate model version.');
+
   const prediction = await replicate.predictions.create({
-    model: MODEL,
+    version: versionId,
     input: {
       human_img:   prepareImageInput(humanImage),
       garm_img:    prepareImageInput(garmentImage),
       garment_des: garmentDescription || 'fashionable outfit',
       category:    category || 'upper_body',
-      steps:       20,  // Reduced from 30 → faster generation
+      steps:       20,
       seed:        42,
       force_dc:    false,
       mask_only:   false,
@@ -59,18 +71,18 @@ export async function createPrediction({ humanImage, garmentImage, garmentDescri
   };
 }
 
+/**
+ * Get the status of an existing prediction
+ */
 export async function getPredictionStatus(predictionId) {
   const replicate = getClient();
-
   try {
     const prediction = await replicate.predictions.get(predictionId);
     console.log(`📊 Replicate ${predictionId}: ${prediction.status}`);
-
     return {
       status:  prediction.status,
       output:  prediction.output || null,
       error:   prediction.error  || null,
-      metrics: prediction.metrics || null,
     };
   } catch (error) {
     console.error(`❌ Replicate status error: ${error.message}`);
