@@ -59,19 +59,24 @@ async function runPrediction(predictionId, { humanImage, garmentImage, garmentDe
 
     console.log('📤 Sending prediction request to HF Space...');
 
-    // Convert base64 to blob for Gradio
+    // Handle garment: base64 data URI → Blob, or fetch from URL
     const humanBlob = base64ToBlob(humanImage);
-    const garmentResponse = await fetch(garmentImage);
-    const garmentBlob = await garmentResponse.blob();
+    let garmentBlob;
+    if (garmentImage.startsWith('data:')) {
+      garmentBlob = base64ToBlob(garmentImage);
+    } else {
+      const garmentResponse = await fetch(garmentImage);
+      garmentBlob = await garmentResponse.blob();
+    }
 
     const result = await app.predict('/tryon', [
-      { background: humanBlob, layers: [], composite: null },  // human image (editor format)
-      garmentBlob,                                               // garment image
-      garmentDescription || 'fashionable outfit',                // description
-      true,                                                       // auto-generated mask
-      true,                                                       // auto-crop
-      30,                                                         // denoise steps
-      0,                                                          // seed
+      { background: humanBlob, layers: [], composite: null },
+      garmentBlob,
+      garmentDescription || 'fashionable outfit',
+      true,
+      true,
+      30,
+      42,
     ]);
 
     console.log(`✅ HF prediction ${predictionId} succeeded`);
@@ -127,8 +132,10 @@ async function runPrediction(predictionId, { humanImage, garmentImage, garmentDe
 export async function getPredictionStatus(predictionId) {
   const prediction = predictions.get(predictionId);
 
+  // If not found (e.g. server restarted), return processing so frontend keeps waiting
   if (!prediction) {
-    throw new Error(`Prediction ${predictionId} not found`);
+    console.warn(`⚠️ Prediction ${predictionId} not in memory (server may have restarted)`);
+    return { status: 'processing', output: null, error: null };
   }
 
   console.log(`📊 HF Prediction ${predictionId}: ${prediction.status}`);
