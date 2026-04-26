@@ -54,7 +54,8 @@ app.use((err, req, res, next) => {
 // ─── Start Server ───────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`\n🚀 Virtual Vogue AI Backend running on http://localhost:${PORT}`);
-  console.log(`📡 AI Provider: ${process.env.AI_PROVIDER || 'replicate'}`);
+  console.log(`📡 AI Provider: HuggingFace (IDM-VTON + Leffa fallback)`);
   console.log(`🔑 Replicate token: ${process.env.REPLICATE_API_TOKEN ? '✅ set' : '❌ MISSING'}`);
+  console.log(`🤗 HF token:        ${process.env.HF_TOKEN ? '✅ set' : '❌ MISSING — required!'}`);
   console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}\n`);
 });
