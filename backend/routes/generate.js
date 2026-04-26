@@ -1,117 +1,119 @@
 import { Router } from 'express';
-import * as replicateProvider from '../providers/replicate.js';
-import * as huggingfaceProvider from '../providers/huggingface.js';
+import { Client } from '@gradio/client';
 import { compressImage } from '../utils/imageProcessor.js';
 
 const router = Router();
 
-// Track which provider owns each prediction → ensures polling uses the right one
-const predictionProviderMap = new Map(); // predictionId → 'replicate' | 'huggingface'
-
-// Track active requests to prevent duplicates
-const activeRequests = new Map();
-
 /**
  * POST /api/generate
+ * 
+ * SYNCHRONOUS architecture: waits for HuggingFace to finish and returns
+ * the result image directly as base64. No polling needed.
+ * Timeout: 4 minutes (HF free tier takes 60-120s typically).
  */
 router.post('/generate', async (req, res) => {
   const { humanImage, garmentImage, garmentDescription, category } = req.body;
 
-  if (!humanImage) {
-    return res.status(400).json({ error: true, message: 'Please upload your photo first.' });
-  }
-  if (!garmentImage) {
-    return res.status(400).json({ error: true, message: 'Please select an outfit.' });
-  }
+  if (!humanImage) return res.status(400).json({ error: true, message: 'Please upload your photo first.' });
+  if (!garmentImage) return res.status(400).json({ error: true, message: 'Please select an outfit.' });
 
-  // Duplicate request check
-  const requestKey = `${req.ip}-${category}`;
-  if (activeRequests.has(requestKey)) {
-    const existing = activeRequests.get(requestKey);
-    if (Date.now() - existing.timestamp < 30000) {
-      console.log(`🔁 Duplicate request blocked`);
-      return res.json({ predictionId: existing.predictionId, status: existing.status });
-    }
-  }
+  // Set a 4-minute server timeout
+  req.socket.setTimeout(240000);
+  res.setTimeout(240000);
 
   try {
-    console.log('\n📸 Processing new generation request...');
-    const compressedImage = await compressImage(humanImage);
+    console.log('\n📸 New generation request — running synchronously...');
+    console.log(`   Category: ${category}`);
 
-    const input = {
-      humanImage:          compressedImage,
-      garmentImage,
-      garmentDescription:  garmentDescription || 'stylish outfit',
-      category:            category || 'upper_body',
-    };
+    // Compress human image
+    const compressedHuman = await compressImage(humanImage);
+    console.log('✅ Image compressed');
 
-    let result = null;
-    let usedProvider = null;
+    // Connect to HuggingFace Space
+    console.log('🔌 Connecting to HuggingFace IDM-VTON space...');
+    const app = await Client.connect('yisol/IDM-VTON');
+    console.log('✅ Connected');
 
-    // Go straight to HuggingFace (Replicate account has no credits)
-    console.log('🤗 Using HuggingFace provider...');
-    result = await huggingfaceProvider.createPrediction(input);
-    usedProvider = 'huggingface';
-    console.log('✅ HuggingFace prediction started:', result.predictionId);
+    // Convert images to blobs
+    const humanBlob    = base64ToBlob(compressedHuman);
+    const garmentBlob  = garmentImage.startsWith('data:')
+      ? base64ToBlob(garmentImage)
+      : await fetch(garmentImage).then(r => r.blob());
 
-    // Remember which provider owns this prediction
-    predictionProviderMap.set(result.predictionId, usedProvider);
-    setTimeout(() => predictionProviderMap.delete(result.predictionId), 30 * 60 * 1000);
+    console.log('🚀 Sending to HuggingFace — waiting for result...');
+    const startTime = Date.now();
 
-    // Track active request
-    activeRequests.set(requestKey, {
-      predictionId: result.predictionId,
-      status:       result.status,
-      timestamp:    Date.now(),
-    });
-    setTimeout(() => activeRequests.delete(requestKey), 5 * 60 * 1000);
+    // Run prediction — this BLOCKS until HF returns the result
+    const result = await app.predict('/tryon', [
+      { background: humanBlob, layers: [], composite: null },
+      garmentBlob,
+      garmentDescription || 'fashionable outfit',
+      true,   // auto mask
+      true,   // auto crop
+      15,     // denoising steps (reduced for speed)
+      42,     // seed
+    ]);
 
-    res.json({
-      predictionId: result.predictionId,
-      status:       result.status,
-      provider:     usedProvider,
-      output:       result.output || null,
+    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`✅ HuggingFace completed in ${elapsed}s`);
+    console.log('📦 Raw output:', JSON.stringify(result?.data)?.substring(0, 200));
+
+    // Extract and convert output image to base64 (avoids CORS on frontend)
+    const outputData = result?.data;
+    let outputBase64 = null;
+
+    if (outputData && Array.isArray(outputData) && outputData.length > 0) {
+      const first = outputData[0];
+      const imageUrl = first?.url || first?.path || (typeof first === 'string' ? first : null);
+
+      if (imageUrl) {
+        console.log('🌐 Fetching result image from HF URL...');
+        const imgRes  = await fetch(imageUrl);
+        const imgBuf  = await imgRes.arrayBuffer();
+        const mime    = imgRes.headers.get('content-type') || 'image/png';
+        outputBase64  = `data:${mime};base64,${Buffer.from(imgBuf).toString('base64')}`;
+        console.log(`✅ Image ready (${(outputBase64.length / 1024).toFixed(0)} KB)`);
+      } else if (first?.data) {
+        outputBase64 = `data:image/png;base64,${first.data}`;
+      }
+    }
+
+    if (!outputBase64) {
+      throw new Error('HuggingFace returned no output image. Please try again.');
+    }
+
+    // Return the result directly — no polling needed!
+    return res.json({
+      status:  'succeeded',
+      output:  [outputBase64],
+      elapsed: `${elapsed}s`,
     });
 
   } catch (error) {
-    console.error('❌ Generation error:', error.message);
-    res.status(500).json({
+    console.error('❌ Generation failed:', error.message);
+    return res.status(500).json({
       error:   true,
-      message: error.message || 'Failed to generate image. Please try again.',
+      message: error.message || 'Generation failed. Please try again.',
     });
   }
 });
 
 /**
- * GET /api/status/:id
- * Polls status using the SAME provider that created the prediction
+ * GET /api/status/:id — kept for backwards compat but not used anymore
  */
-router.get('/status/:id', async (req, res) => {
-  const { id } = req.params;
-  if (!id) return res.status(400).json({ error: true, message: 'Prediction ID required.' });
-
-  try {
-    // Look up which provider owns this prediction
-    const providerName = predictionProviderMap.get(id) || 'huggingface'; // default HF if unknown
-    const provider = providerName === 'replicate' ? replicateProvider : huggingfaceProvider;
-
-    console.log(`📊 Checking status for ${id} via ${providerName}`);
-    const result = await provider.getPredictionStatus(id);
-
-    res.json({
-      predictionId: id,
-      status:       result.status,
-      output:       result.output,
-      error:        result.error,
-    });
-
-  } catch (error) {
-    console.error(`❌ Status error for ${id}:`, error.message);
-    res.status(500).json({
-      error:   true,
-      message: error.message || 'Failed to check prediction status.',
-    });
-  }
+router.get('/status/:id', (req, res) => {
+  res.json({ status: 'processing', message: 'Using synchronous mode — no polling needed.' });
 });
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function base64ToBlob(base64String) {
+  const parts      = base64String.split(';base64,');
+  const mimeType   = parts[0].replace('data:', '');
+  const byteChars  = atob(parts[1]);
+  const byteArr    = new Uint8Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) byteArr[i] = byteChars.charCodeAt(i);
+  return new Blob([byteArr], { type: mimeType });
+}
 
 export default router;
