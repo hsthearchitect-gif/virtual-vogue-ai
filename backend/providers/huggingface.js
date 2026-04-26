@@ -75,7 +75,7 @@ async function runPrediction(predictionId, { humanImage, garmentImage, garmentDe
       garmentDescription || 'fashionable outfit',
       true,
       true,
-      30,
+      15,   // Reduced 30 → 15: halves GPU time with minimal quality loss
       42,
     ]);
 

@@ -19,11 +19,11 @@ export async function compressImage(base64String) {
     console.log(`📦 Original image size: ${(originalSize / 1024).toFixed(1)} KB`);
 
     const compressedBuffer = await sharp(inputBuffer)
-      .resize(1024, 1024, {
+      .resize(768, 768, {   // 768px instead of 1024px — smaller = faster
         fit: 'inside',
         withoutEnlargement: true,
       })
-      .jpeg({ quality: 80 })
+      .jpeg({ quality: 50 })  // Compressed harder: 75 -> 50
       .toBuffer();
 
     const compressedSize = compressedBuffer.length;
