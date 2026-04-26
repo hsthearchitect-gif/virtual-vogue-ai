@@ -6,9 +6,11 @@ import { dirname, join } from 'path';
 import generateRouter from './routes/generate.js';
 import { rateLimiter } from './middleware/rateLimiter.js';
 
-// Load env from project root
+// ESM equivalent of __dirname
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname  = dirname(__filename);
+
+// In local dev, load from .env — on Render, env vars are injected by the platform
 dotenv.config({ path: join(__dirname, '..', '.env') });
 
 const app = express();
@@ -51,5 +53,6 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`\n🚀 Virtual Vogue AI Backend running on http://localhost:${PORT}`);
   console.log(`📡 AI Provider: ${process.env.AI_PROVIDER || 'replicate'}`);
-  console.log(`🔗 Frontend URL: ${FRONTEND_URL}\n`);
+  console.log(`🔑 Replicate token: ${process.env.REPLICATE_API_TOKEN ? '✅ set' : '❌ MISSING'}`);
+  console.log(`🔗 Frontend URL: ${process.env.FRONTEND_URL || 'http://localhost:3000'}\n`);
 });
