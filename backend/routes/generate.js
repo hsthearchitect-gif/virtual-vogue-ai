@@ -28,29 +28,34 @@ router.post('/generate', async (req, res) => {
     const compressedHuman = await compressImage(humanImage);
     console.log('✅ Image compressed');
 
-    // Connect to HuggingFace Space
-    console.log('🔌 Connecting to HuggingFace IDM-VTON space...');
-    const app = await Client.connect('yisol/IDM-VTON');
+    // Connect to Leffa space (no ZeroGPU quota restrictions)
+    console.log('🔌 Connecting to Leffa virtual try-on space...');
+    const app = await Client.connect('franciszzj/Leffa');
     console.log('✅ Connected');
 
     // Convert images to blobs
-    const humanBlob    = base64ToBlob(compressedHuman);
-    const garmentBlob  = garmentImage.startsWith('data:')
+    const humanBlob   = base64ToBlob(compressedHuman);
+    const garmentBlob = garmentImage.startsWith('data:')
       ? base64ToBlob(garmentImage)
       : await fetch(garmentImage).then(r => r.blob());
 
-    console.log('🚀 Sending to HuggingFace — waiting for result...');
+    console.log('🚀 Sending to Leffa — waiting for result...');
     const startTime = Date.now();
 
-    // Run prediction — this BLOCKS until HF returns the result
-    const result = await app.predict('/tryon', [
-      { background: humanBlob, layers: [], composite: null },
-      garmentBlob,
-      garmentDescription || 'fashionable outfit',
-      true,   // auto mask
-      true,   // auto crop
-      15,     // denoising steps (reduced for speed)
-      42,     // seed
+    // Leffa /leffa_predict_vt inputs:
+    // Person Image, Garment Image, Accelerate UNet (bool), Steps, Guidance Scale, Seed, Model Type, Garment Type, Repaint Mode
+    const garmentType = category === 'lower_body' ? 'lower_body' : category === 'dresses' ? 'dresses' : 'upper_body';
+
+    const result = await app.predict('/leffa_predict_vt', [
+      humanBlob,          // Person Image
+      garmentBlob,        // Garment Image
+      true,               // Accelerate UNet
+      30,                 // Inference Steps
+      2.5,                // Guidance Scale
+      42,                 // Seed
+      'viton_hd',         // Model Type
+      garmentType,        // Garment Type
+      'image',            // Repaint Mode
     ]);
 
     const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
