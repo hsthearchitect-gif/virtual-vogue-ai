@@ -48,19 +48,11 @@ router.post('/generate', async (req, res) => {
     let result = null;
     let usedProvider = null;
 
-    // Try Replicate first, fall back to HuggingFace
-    try {
-      console.log('🚀 Trying Replicate...');
-      result = await replicateProvider.createPrediction(input);
-      usedProvider = 'replicate';
-      console.log('✅ Replicate prediction created:', result.predictionId);
-    } catch (repErr) {
-      console.warn(`⚠️ Replicate failed: ${repErr.message}`);
-      console.log('🔄 Falling back to Hugging Face...');
-      result = await huggingfaceProvider.createPrediction(input);
-      usedProvider = 'huggingface';
-      console.log('✅ HuggingFace prediction created:', result.predictionId);
-    }
+    // Go straight to HuggingFace (Replicate account has no credits)
+    console.log('🤗 Using HuggingFace provider...');
+    result = await huggingfaceProvider.createPrediction(input);
+    usedProvider = 'huggingface';
+    console.log('✅ HuggingFace prediction started:', result.predictionId);
 
     // Remember which provider owns this prediction
     predictionProviderMap.set(result.predictionId, usedProvider);
