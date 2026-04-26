@@ -75,19 +75,35 @@ async function runPrediction(predictionId, { humanImage, garmentImage, garmentDe
     ]);
 
     console.log(`✅ HF prediction ${predictionId} succeeded`);
+    console.log('📦 Raw HF output:', JSON.stringify(result?.data)?.substring(0, 300));
 
-    // Extract output URL from Gradio response
+    // Extract output from Gradio response
     const outputData = result?.data;
-    let outputUrl = null;
+    let outputBase64 = null;
 
     if (outputData && Array.isArray(outputData) && outputData.length > 0) {
-      // Gradio returns file objects with url property
-      outputUrl = outputData[0]?.url || outputData[0]?.path || outputData[0];
+      const first = outputData[0];
+
+      // Gradio can return: { url, path }, a string URL, or raw base64
+      let imageUrl = first?.url || first?.path || (typeof first === 'string' ? first : null);
+
+      if (imageUrl) {
+        console.log('🌐 Fetching image from HF URL:', imageUrl.substring(0, 80));
+        // Fetch and convert to base64 so CORS is not an issue on the frontend
+        const imgRes = await fetch(imageUrl);
+        const imgBuf = await imgRes.arrayBuffer();
+        const mime   = imgRes.headers.get('content-type') || 'image/png';
+        outputBase64 = `data:${mime};base64,${Buffer.from(imgBuf).toString('base64')}`;
+        console.log('✅ Image converted to base64, size:', outputBase64.length);
+      } else if (first?.data) {
+        // Some Gradio versions return {data: 'base64...'}
+        outputBase64 = `data:image/png;base64,${first.data}`;
+      }
     }
 
     predictions.set(predictionId, {
       status: 'succeeded',
-      output: outputUrl ? [outputUrl] : null,
+      output: outputBase64 ? [outputBase64] : null,
       error: null,
       completedAt: Date.now(),
     });
