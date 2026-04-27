@@ -1,20 +1,18 @@
 import { Router } from 'express';
-import { Client } from '@gradio/client';
 import { compressImage } from '../utils/imageProcessor.js';
+import { runWithRotation, getTokenStats } from '../providers/hfMultiToken.js';
 import { runTryOn as falTryOn } from '../providers/falai.js';
 
 const router = Router();
 
-const HF_TOKEN  = process.env.HF_TOKEN;
-const FAL_KEY   = process.env.FAL_KEY;
+const FAL_KEY = process.env.FAL_KEY;
 
 /**
  * POST /api/generate
  *
- * Provider priority:
- *  1. fal.ai  — if FAL_KEY is set (no quota, ~10-15s, recommended)
- *  2. HuggingFace IDM-VTON — if HF_TOKEN is set (100 GPU-sec/day free)
- *  3. HuggingFace Leffa — fallback
+ * Provider chain:
+ *  1. fal.ai  — if FAL_KEY set (unlimited, paid per-generation)
+ *  2. HF multi-token rotation — cycles through all HF_TOKENS until one works
  */
 router.post('/generate', async (req, res) => {
   const { humanImage, garmentImage, garmentDescription, category } = req.body;
@@ -25,38 +23,25 @@ router.post('/generate', async (req, res) => {
   req.socket.setTimeout(300000);
 
   try {
-    console.log('\n📸 Generation request received');
-    console.log(`   Category: ${category}`);
-    console.log(`   FAL_KEY:  ${FAL_KEY  ? '✅' : '❌'} | HF_TOKEN: ${HF_TOKEN ? '✅' : '❌'}`);
+    console.log('\n📸 Generation request');
+    const stats = getTokenStats();
+    console.log(`   Tokens: ${stats.available}/${stats.total} available | FAL: ${FAL_KEY ? '✅' : '❌'}`);
 
     const compressedHuman = await compressImage(humanImage);
 
-    // ── Provider 1: fal.ai (unlimited, fast) ────────────────────────────────
+    // ── fal.ai (unlimited, if configured) ─────────────────────────────────
     if (FAL_KEY) {
       try {
-        console.log('\n🚀 Using fal.ai provider...');
         const { base64, elapsed } = await falTryOn({
-          humanImage:         compressedHuman,
-          garmentImage,
-          garmentDescription,
-          category,
+          humanImage: compressedHuman, garmentImage, garmentDescription, category,
         });
-        console.log(`\n✅ fal.ai succeeded in ${elapsed}s`);
         return res.json({ status: 'succeeded', output: [base64], elapsed, provider: 'fal.ai' });
-      } catch (falErr) {
-        console.warn(`⚠️ fal.ai failed: ${falErr.message}`);
-        console.log('🔄 Falling back to HuggingFace...');
+      } catch (err) {
+        console.warn('⚠️ fal.ai failed, falling back to HF:', err.message);
       }
     }
 
-    // ── Provider 2+3: HuggingFace (with token auth) ─────────────────────────
-    if (!HF_TOKEN) {
-      return res.status(500).json({
-        error: true,
-        message: 'No AI provider configured. Please set FAL_KEY or HF_TOKEN in environment variables.',
-      });
-    }
-
+    // ── HF multi-token rotation ────────────────────────────────────────────
     const humanBlob   = base64ToBlob(compressedHuman);
     const garmentBlob = garmentImage.startsWith('data:')
       ? base64ToBlob(garmentImage)
@@ -66,45 +51,34 @@ router.post('/generate', async (req, res) => {
                       : category === 'dresses'    ? 'dresses'
                       : 'upper_body';
 
-    const startTime = Date.now();
-    let result = null;
+    const start  = Date.now();
+    const result = await runWithRotation(humanBlob, garmentBlob, garmentDescription, garmentType);
+    const elapsed = ((Date.now() - start) / 1000).toFixed(1);
 
-    // Try IDM-VTON
-    try {
-      console.log('\n🔌 Connecting to IDM-VTON...');
-      const app = await Client.connect('yisol/IDM-VTON', { hf_token: HF_TOKEN });
-      result = await app.predict('/tryon', [
-        { background: humanBlob, layers: [], composite: null },
-        garmentBlob,
-        garmentDescription || 'fashionable outfit',
-        true, true, 20, 42,
-      ]);
-      console.log('✅ IDM-VTON succeeded');
-    } catch (idmErr) {
-      console.warn(`⚠️ IDM-VTON failed: ${idmErr.message}`);
+    const base64 = await extractBase64Image(result?.data);
+    if (!base64) throw new Error('No image returned from HuggingFace.');
 
-      // Try Leffa
-      console.log('🔄 Trying Leffa...');
-      const app2 = await Client.connect('franciszzj/Leffa', { hf_token: HF_TOKEN });
-      result = await app2.predict('/leffa_predict_vt', [
-        humanBlob, garmentBlob,
-        true, 30, 2.5, 42, 'viton_hd', garmentType, true,
-      ]);
-      console.log('✅ Leffa succeeded');
-    }
-
-    const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
-    const base64  = await extractBase64Image(result?.data);
-
-    if (!base64) throw new Error(`No image in HF response: ${JSON.stringify(result?.data)?.substring(0, 200)}`);
-
-    console.log(`✅ HF completed in ${elapsed}s (${(base64.length / 1024).toFixed(0)} KB)`);
+    console.log(`✅ Done in ${elapsed}s (${(base64.length / 1024).toFixed(0)} KB)`);
     return res.json({ status: 'succeeded', output: [base64], elapsed, provider: 'huggingface' });
 
   } catch (error) {
-    console.error('\n❌ Generation failed:', error.message);
+    console.error('❌ Generation failed:', error.message);
     return res.status(500).json({ error: true, message: error.message });
   }
+});
+
+/**
+ * GET /api/quota  — shows how many tokens are still available today
+ */
+router.get('/quota', (req, res) => {
+  const stats = getTokenStats();
+  res.json({
+    ...stats,
+    estimatedGenerationsLeft: stats.available * 5,
+    message: stats.available > 0
+      ? `✅ ${stats.available} account(s) available (~${stats.available * 5} generations left today)`
+      : '⚠️ All accounts exhausted for today. Resets at midnight UTC.',
+  });
 });
 
 router.get('/status/:id', (_req, res) => res.json({ status: 'processing' }));
@@ -125,15 +99,18 @@ async function extractBase64Image(data) {
   for (const item of data) {
     const url = item?.url || item?.path;
     if (url?.startsWith('http')) {
-      const r   = await fetch(url);
-      const buf = await r.arrayBuffer();
-      if (buf.byteLength > 1000) {
-        const mime = r.headers.get('content-type') || 'image/png';
-        return `data:${mime};base64,${Buffer.from(buf).toString('base64')}`;
-      }
+      try {
+        const r   = await fetch(url);
+        const buf = await r.arrayBuffer();
+        if (buf.byteLength > 1000) {
+          const mime = r.headers.get('content-type') || 'image/png';
+          return `data:${mime};base64,${Buffer.from(buf).toString('base64')}`;
+        }
+      } catch (_) {}
     }
     if (item?.data?.length > 100) return `data:${item.mime_type || 'image/png'};base64,${item.data}`;
-    if (typeof item === 'string' && item.length > 100 && !item.startsWith('http')) return `data:image/png;base64,${item}`;
+    if (typeof item === 'string' && item.length > 100 && !item.startsWith('http'))
+      return `data:image/png;base64,${item}`;
   }
   return null;
 }
