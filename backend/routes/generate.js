@@ -2,11 +2,13 @@ import { Router } from 'express';
 import { compressImage } from '../utils/imageProcessor.js';
 import { runTryOn as falTryOn } from '../providers/falai.js';
 import { runWithRotation, getTokenStats } from '../providers/hfMultiToken.js';
+import { runColabTryOn } from '../providers/colab.js';
 import { checkTrial, recordUsage, getUsageStats } from '../utils/trialLimiter.js';
 
 const router = Router();
 
-const FAL_KEY = process.env.FAL_KEY;
+const FAL_KEY   = process.env.FAL_KEY;
+const COLAB_URL = process.env.COLAB_API_URL;
 const HF_AVAILABLE = !!(process.env.HF_TOKENS || process.env.HF_TOKEN);
 
 /**
@@ -46,23 +48,32 @@ router.post('/generate', async (req, res) => {
     let base64 = null;
     let provider = null;
 
-    // ── fal.ai (primary — unlimited quota) ──────────────────────────────────
-    if (FAL_KEY) {
+    // ── 1. Colab (FREE unlimited GPU — best option when active) ─────────────
+    if (COLAB_URL && !base64) {
       try {
-        console.log('🚀 Using fal.ai...');
-        const result = await falTryOn({
-          humanImage: compressedHuman, garmentImage, garmentDescription, category,
-        });
+        console.log('🧪 Trying Colab GPU...');
+        base64   = await runColabTryOn({ humanImage: compressedHuman, garmentImage, garmentDescription, category });
+        provider = 'colab';
+        console.log('✅ Colab succeeded');
+      } catch (err) {
+        console.warn('⚠️ Colab failed (session may have expired):', err.message);
+      }
+    }
+
+    // ── 2. fal.ai (paid, no daily quota) ────────────────────────────────────
+    if (FAL_KEY && !base64) {
+      try {
+        console.log('🚀 Trying fal.ai...');
+        const result = await falTryOn({ humanImage: compressedHuman, garmentImage, garmentDescription, category });
         base64   = result.base64;
         provider = 'fal.ai';
-        console.log(`✅ fal.ai done in ${result.elapsed}s`);
       } catch (err) {
         console.warn('⚠️ fal.ai failed:', err.message);
       }
     }
 
-    // ── HuggingFace fallback ─────────────────────────────────────────────────
-    if (!base64 && HF_AVAILABLE) {
+    // ── 3. HuggingFace token rotation (free, ~5 gen/day) ────────────────────
+    if (HF_AVAILABLE && !base64) {
       try {
         console.log('🔄 Trying HuggingFace...');
         const humanBlob   = base64ToBlob(compressedHuman);
