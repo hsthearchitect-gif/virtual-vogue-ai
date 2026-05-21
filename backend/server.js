@@ -17,6 +17,28 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
+function getProviderStatus() {
+  const colabConfigured = !!process.env.COLAB_API_URL;
+  const falConfigured = !!process.env.FAL_KEY;
+  const hfConfigured = !!(process.env.HF_TOKENS || process.env.HF_TOKEN);
+  const activeProvider = colabConfigured
+    ? 'colab'
+    : falConfigured
+      ? 'fal.ai'
+      : hfConfigured
+        ? 'huggingface'
+        : 'none';
+
+  return {
+    activeProvider,
+    providers: {
+      colabConfigured,
+      falConfigured,
+      hfConfigured,
+    },
+  };
+}
+
 // ─── Middleware ──────────────────────────────────────────────
 app.use(cors({
   origin: true,
@@ -37,7 +59,7 @@ app.use('/api', generateRouter);
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', provider: process.env.AI_PROVIDER || 'replicate' });
+  res.json({ status: 'ok', ...getProviderStatus() });
 });
 
 // ─── Error Handling ─────────────────────────────────────────
