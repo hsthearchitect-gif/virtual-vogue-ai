@@ -32,6 +32,7 @@ router.post('/generate', async (req, res) => {
   if (!trial.allowed) {
     return res.status(429).json({
       error:   true,
+      code:    'TRIAL_LIMIT_REACHED',
       message: `You've used all ${trial.max} free trials for today. Come back tomorrow for more!`,
       trialsUsed:      trial.used,
       trialsMax:       trial.max,
@@ -113,7 +114,12 @@ router.post('/generate', async (req, res) => {
 
   } catch (error) {
     console.error('❌ Generation failed:', error.message);
-    return res.status(500).json({ error: true, message: error.message });
+    const classified = classifyGenerationError(error);
+    return res.status(classified.status).json({
+      error: true,
+      code: classified.code,
+      message: classified.message,
+    });
   }
 });
 
@@ -134,6 +140,7 @@ router.get('/quota', (req, res) => {
     system: {
       hfTokens: hfStats,
       totalGenerationsToday: usage.totalGenerationsToday,
+      colabConfigured: !!COLAB_URL,
       falKeyConfigured: !!FAL_KEY,
     },
   });
@@ -170,6 +177,50 @@ async function extractBase64Image(data) {
       return `data:image/png;base64,${item}`;
   }
   return null;
+}
+
+function classifyGenerationError(error) {
+  const rawMessage = error?.message || 'Generation failed. Please try again later.';
+  const normalized = rawMessage.toLowerCase();
+
+  if (
+    normalized.includes('zerogpu') ||
+    normalized.includes('gpu quota') ||
+    normalized.includes('daily gpu quota') ||
+    normalized.includes('quota') ||
+    normalized.includes('exceeded')
+  ) {
+    return {
+      status: 503,
+      code: 'PROVIDER_QUOTA_EXHAUSTED',
+      message:
+        'AI generation capacity is temporarily exhausted on the free provider. Start the Colab GPU notebook or configure FAL_KEY on the backend to keep try-ons available.',
+    };
+  }
+
+  if (normalized.includes('no hf tokens configured')) {
+    return {
+      status: 503,
+      code: 'NO_PROVIDER_CONFIGURED',
+      message:
+        'No active AI provider is configured. Add COLAB_API_URL, FAL_KEY, or HF_TOKENS on the backend.',
+    };
+  }
+
+  if (normalized.includes('all ai providers failed')) {
+    return {
+      status: 503,
+      code: 'ALL_PROVIDERS_FAILED',
+      message:
+        'All AI providers are unavailable right now. Check the Colab session, fal.ai key, or Hugging Face token quota.',
+    };
+  }
+
+  return {
+    status: 500,
+    code: 'GENERATION_FAILED',
+    message: rawMessage,
+  };
 }
 
 export default router;

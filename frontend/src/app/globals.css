@@ -1,0 +1,96 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap");
+
+:root {
+  --bg-main: #0f0f0f;
+  --bg-panel: #171717;
+  --bg-card: #1d1d1d;
+  --bg-card-hover: #242424;
+  --text-primary: #f8f5ef;
+  --text-secondary: #b8b1a8;
+  --text-muted: #817b74;
+  --text-inverse: #111111;
+  --accent: #d4a574;
+  --accent-light: #e8bd8a;
+  --accent-dark: #a97848;
+  --accent-subtle: rgba(212, 165, 116, 0.13);
+  --border: rgba(255, 255, 255, 0.12);
+  --border-hover: rgba(212, 165, 116, 0.55);
+  --error: #dc7864;
+  --shadow-md: 0 16px 40px rgba(0, 0, 0, 0.28);
+  --shadow-glow: 0 0 32px rgba(212, 165, 116, 0.16);
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-full: 999px;
+  --space-xs: 0.375rem;
+  --space-sm: 0.625rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+  --space-3xl: 4rem;
+  --transition-fast: 140ms ease;
+  --transition-base: 220ms ease;
+  --transition-slow: 420ms ease;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background: linear-gradient(180deg, #111111 0%, #0d0d0d 52%, #151311 100%);
+  color: var(--text-primary);
+  margin: 0;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+p,
+h1,
+h2,
+h3 {
+  margin: 0;
+}
+
+a {
+  color: inherit;
+}
+
+img {
+  max-width: 100%;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
