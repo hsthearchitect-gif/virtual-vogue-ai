@@ -61,7 +61,14 @@
 }
 
 .hiddenInput {
-  display: none;
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 1rem;
 }
 
 .emptyState {
@@ -118,6 +125,12 @@
   font-size: 0.7rem;
 }
 
+.mobileHintText {
+  display: none;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
 .dropIndicator {
   display: flex;
   flex-direction: column;
@@ -150,6 +163,7 @@
   height: 100%;
   position: absolute;
   inset: 0;
+  z-index: 1;
 }
 
 .previewImg {
@@ -162,7 +176,9 @@
 .previewOverlay {
   position: absolute;
   inset: 0;
+  z-index: 3;
   opacity: 0;
+  pointer-events: none;
   transition: opacity var(--transition-base);
   background: linear-gradient(rgba(0, 0, 0, 0.55) 0%, transparent 35% 65%, rgba(0, 0, 0, 0.55) 100%);
   display: flex;
@@ -190,6 +206,7 @@
 
 .removeBtn {
   align-self: flex-end;
+  pointer-events: auto;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -228,6 +245,12 @@
   overflow: hidden;
 }
 
+@media (hover: none) {
+  .previewOverlay {
+    opacity: 1;
+  }
+}
+
 @media (max-width: 700px) {
   .wrapper {
     max-width: 100%;
@@ -239,5 +262,17 @@
 
   .hasPreview {
     min-height: 300px;
+  }
+
+  .primaryText {
+    font-size: 0.95rem;
+  }
+
+  .secondaryText {
+    display: none;
+  }
+
+  .mobileHintText {
+    display: block;
   }
 }

@@ -3,6 +3,9 @@
 import { useCallback, useRef, useState } from "react";
 import styles from "./ImageUploader.module.css";
 
+const MAX_IMAGE_SIZE_MB = 20;
+const MOBILE_IMAGE_EXTENSIONS = /\.(heic|heif)$/i;
+
 export default function ImageUploader({ onImageSelected, disabled }) {
   const [preview, setPreview] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -17,13 +20,15 @@ export default function ImageUploader({ onImageSelected, disabled }) {
 
       setError("");
 
-      if (!file.type.startsWith("image/")) {
-        setError("Please upload an image file (JPEG, PNG, WebP).");
+      const isImage = file.type.startsWith("image/") || MOBILE_IMAGE_EXTENSIONS.test(file.name);
+
+      if (!isImage) {
+        setError("Please upload an image file.");
         return;
       }
 
-      if (file.size > 10 * 1024 * 1024) {
-        setError("Image too large. Max 10MB.");
+      if (file.size > MAX_IMAGE_SIZE_MB * 1024 * 1024) {
+        setError(`Image too large. Max ${MAX_IMAGE_SIZE_MB}MB.`);
         return;
       }
 
@@ -40,8 +45,16 @@ export default function ImageUploader({ onImageSelected, disabled }) {
     [onImageSelected]
   );
 
-  const openFileDialog = () => {
-    if (!disabled) inputRef.current?.click();
+  const openFileDialog = (event) => {
+    event?.preventDefault();
+    if (disabled) return;
+
+    if (typeof inputRef.current?.showPicker === "function") {
+      inputRef.current.showPicker();
+      return;
+    }
+
+    inputRef.current?.click();
   };
 
   const resetImage = (event) => {
@@ -100,19 +113,18 @@ export default function ImageUploader({ onImageSelected, disabled }) {
                 handleFile(event.dataTransfer.files?.[0]);
               }
         }
-        onClick={openFileDialog}
         id="image-upload-zone"
         role="button"
         tabIndex={0}
         onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") openFileDialog();
+          if (event.key === "Enter" || event.key === " ") openFileDialog(event);
         }}
         aria-label="Upload photo"
       >
         <input
           ref={inputRef}
           type="file"
-          accept="image/jpeg,image/png,image/webp,image/gif"
+          accept="image/*,.heic,.heif"
           onChange={(event) => {
             handleFile(event.target.files?.[0]);
             event.target.value = "";
@@ -186,7 +198,8 @@ export default function ImageUploader({ onImageSelected, disabled }) {
                 <p className={styles.secondaryText}>
                   or <span className={styles.browseLink}>click to browse</span>
                 </p>
-                <p className={styles.hintText}>JPEG / PNG / WebP / Max 10MB</p>
+                <p className={styles.hintText}>JPEG / PNG / WebP / Max {MAX_IMAGE_SIZE_MB}MB</p>
+                <p className={styles.mobileHintText}>Tap to choose from camera or gallery</p>
               </>
             )}
           </div>
