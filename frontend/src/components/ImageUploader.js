@@ -1,24 +1,81 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import styles from "./ImageUploader.module.css";
 
 const MAX_IMAGE_SIZE_MB = 20;
 const MOBILE_IMAGE_EXTENSIONS = /\.(heic|heif)$/i;
+const MAX_UPLOAD_DIMENSION = 1600;
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (event) => resolve(event.target.result);
+    reader.onerror = () => reject(new Error("Could not read the selected image."));
+    reader.readAsDataURL(file);
+  });
+}
+
+function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = () => reject(new Error("Could not preview this image format."));
+    image.src = url;
+  });
+}
+
+async function normalizeImageForUpload(file, previewUrl) {
+  try {
+    const image = await loadImage(previewUrl);
+    const largestSide = Math.max(image.naturalWidth, image.naturalHeight);
+    const scale = largestSide > MAX_UPLOAD_DIMENSION ? MAX_UPLOAD_DIMENSION / largestSide : 1;
+    const width = Math.max(1, Math.round(image.naturalWidth * scale));
+    const height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+
+    canvas.width = width;
+    canvas.height = height;
+    context.drawImage(image, 0, 0, width, height);
+
+    return canvas.toDataURL("image/jpeg", 0.88);
+  } catch {
+    return readFileAsDataUrl(file);
+  }
+}
 
 export default function ImageUploader({ onImageSelected, disabled }) {
   const [preview, setPreview] = useState(null);
+  const [isPreparing, setIsPreparing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [fileName, setFileName] = useState("");
   const [error, setError] = useState("");
-  const inputRef = useRef(null);
   const dragDepth = useRef(0);
+  const previewUrlRef = useRef(null);
+  const selectionTokenRef = useRef(0);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    };
+  }, []);
+
+  const clearPreviewUrl = useCallback(() => {
+    if (previewUrlRef.current) {
+      URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = null;
+    }
+  }, []);
 
   const handleFile = useCallback(
-    (file) => {
+    async (file) => {
       if (!file) return;
 
+      const token = selectionTokenRef.current + 1;
+      selectionTokenRef.current = token;
       setError("");
+      setIsPreparing(false);
 
       const isImage = file.type.startsWith("image/") || MOBILE_IMAGE_EXTENSIONS.test(file.name);
 
@@ -32,34 +89,38 @@ export default function ImageUploader({ onImageSelected, disabled }) {
         return;
       }
 
+      clearPreviewUrl();
+      const nextPreviewUrl = URL.createObjectURL(file);
+      previewUrlRef.current = nextPreviewUrl;
+      setPreview(nextPreviewUrl);
       setFileName(file.name);
+      setIsPreparing(true);
+      onImageSelected(null);
 
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUrl = event.target.result;
-        setPreview(dataUrl);
+      try {
+        const dataUrl = await normalizeImageForUpload(file, nextPreviewUrl);
+        if (selectionTokenRef.current !== token) return;
         onImageSelected(dataUrl);
-      };
-      reader.readAsDataURL(file);
+      } catch {
+        if (selectionTokenRef.current !== token) return;
+        setError("This image could not be loaded. Please try another photo.");
+        setPreview(null);
+        setFileName("");
+        onImageSelected(null);
+        clearPreviewUrl();
+      } finally {
+        if (selectionTokenRef.current === token) setIsPreparing(false);
+      }
     },
-    [onImageSelected]
+    [clearPreviewUrl, onImageSelected]
   );
 
-  const openFileDialog = (event) => {
-    event?.preventDefault();
-    if (disabled) return;
-
-    if (typeof inputRef.current?.showPicker === "function") {
-      inputRef.current.showPicker();
-      return;
-    }
-
-    inputRef.current?.click();
-  };
-
   const resetImage = (event) => {
-    event.stopPropagation();
+    event?.stopPropagation();
+    selectionTokenRef.current += 1;
+    clearPreviewUrl();
     setPreview(null);
+    setIsPreparing(false);
     setFileName("");
     setError("");
     onImageSelected(null);
@@ -114,48 +175,55 @@ export default function ImageUploader({ onImageSelected, disabled }) {
               }
         }
         id="image-upload-zone"
-        role="button"
-        tabIndex={0}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === " ") openFileDialog(event);
-        }}
-        aria-label="Upload photo"
       >
-        <input
-          ref={inputRef}
-          type="file"
-          accept="image/*,.heic,.heif"
-          onChange={(event) => {
-            handleFile(event.target.files?.[0]);
-            event.target.value = "";
-          }}
-          className={styles.hiddenInput}
-          disabled={disabled}
-          id="image-upload-input"
-        />
-
         {preview ? (
           <div className={styles.previewWrap}>
-            <img src={preview} alt="Uploaded photo preview" className={styles.previewImg} />
+            <img
+              src={preview}
+              alt="Uploaded photo preview"
+              className={styles.previewImg}
+              onError={() => setError("Preview unavailable, but the photo was selected.")}
+            />
             <div className={styles.previewOverlay}>
-              <span className={styles.previewTag}>Photo ready</span>
-              <button
-                className={styles.removeBtn}
-                onClick={resetImage}
-                id="remove-image-btn"
-                type="button"
-                disabled={disabled}
-              >
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                  <path
-                    d="M1 1L13 13M13 1L1 13"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
+              <span className={styles.previewTag}>{isPreparing ? "Preparing photo" : "Photo ready"}</span>
+              <div className={styles.previewActions}>
+                <label className={styles.overlayAction}>
+                  Retake
+                  <input
+                    type="file"
+                    accept="image/*,.heic,.heif"
+                    capture="user"
+                    onChange={(event) => {
+                      handleFile(event.target.files?.[0]);
+                      event.target.value = "";
+                    }}
+                    className={styles.actionInput}
+                    disabled={disabled}
                   />
-                </svg>
-                Change photo
-              </button>
+                </label>
+                <label className={styles.overlayAction}>
+                  Gallery
+                  <input
+                    type="file"
+                    accept="image/*,.heic,.heif"
+                    onChange={(event) => {
+                      handleFile(event.target.files?.[0]);
+                      event.target.value = "";
+                    }}
+                    className={styles.actionInput}
+                    disabled={disabled}
+                  />
+                </label>
+                <button
+                  className={styles.removeBtn}
+                  onClick={resetImage}
+                  id="remove-image-btn"
+                  type="button"
+                  disabled={disabled}
+                >
+                  Remove
+                </button>
+              </div>
             </div>
           </div>
         ) : (
@@ -194,12 +262,38 @@ export default function ImageUploader({ onImageSelected, disabled }) {
                     />
                   </svg>
                 </div>
-                <p className={styles.primaryText}>Drop your photo here</p>
-                <p className={styles.secondaryText}>
-                  or <span className={styles.browseLink}>click to browse</span>
-                </p>
+                <p className={styles.primaryText}>Add your photo</p>
+                <div className={styles.uploadActions}>
+                  <label className={styles.cameraAction}>
+                    Take Photo
+                    <input
+                      type="file"
+                      accept="image/*,.heic,.heif"
+                      capture="user"
+                      onChange={(event) => {
+                        handleFile(event.target.files?.[0]);
+                        event.target.value = "";
+                      }}
+                      className={styles.actionInput}
+                      disabled={disabled}
+                      id="image-upload-input"
+                    />
+                  </label>
+                  <label className={styles.galleryAction}>
+                    Gallery
+                    <input
+                      type="file"
+                      accept="image/*,.heic,.heif"
+                      onChange={(event) => {
+                        handleFile(event.target.files?.[0]);
+                        event.target.value = "";
+                      }}
+                      className={styles.actionInput}
+                      disabled={disabled}
+                    />
+                  </label>
+                </div>
                 <p className={styles.hintText}>JPEG / PNG / WebP / Max {MAX_IMAGE_SIZE_MB}MB</p>
-                <p className={styles.mobileHintText}>Tap to choose from camera or gallery</p>
               </>
             )}
           </div>

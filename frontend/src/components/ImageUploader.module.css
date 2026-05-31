@@ -9,7 +9,7 @@
   min-height: 380px;
   border: 1.5px dashed var(--border);
   border-radius: var(--radius-md);
-  cursor: pointer;
+  cursor: default;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.035), transparent),
     var(--bg-card);
@@ -60,20 +60,9 @@
   pointer-events: none;
 }
 
-.hiddenInput {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  width: 100%;
-  height: 100%;
-  opacity: 0;
-  cursor: pointer;
-  font-size: 1rem;
-}
-
 .emptyState {
+  width: 100%;
   text-align: center;
-  pointer-events: none;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -123,12 +112,6 @@
   color: var(--text-muted);
   margin-top: 4px;
   font-size: 0.7rem;
-}
-
-.mobileHintText {
-  display: none;
-  color: var(--text-muted);
-  font-size: 0.72rem;
 }
 
 .dropIndicator {
@@ -204,13 +187,90 @@
   font-weight: 650;
 }
 
+.uploadActions,
+.previewActions {
+  width: 100%;
+  max-width: 260px;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.previewActions {
+  width: 100%;
+  max-width: none;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: center;
+}
+
+.cameraAction,
+.galleryAction,
+.overlayAction {
+  position: relative;
+  min-height: 44px;
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+  transition:
+    transform var(--transition-fast),
+    border-color var(--transition-fast),
+    background var(--transition-fast);
+  font-family: Outfit, sans-serif;
+  font-size: 0.88rem;
+  font-weight: 700;
+  user-select: none;
+}
+
+.cameraAction {
+  color: var(--text-inverse);
+  border: 1px solid rgba(212, 165, 116, 0.55);
+  background: linear-gradient(135deg, var(--accent-light), var(--accent));
+  box-shadow: var(--shadow-glow);
+}
+
+.galleryAction {
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.overlayAction {
+  min-height: 40px;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(15, 15, 15, 0.75);
+  backdrop-filter: blur(10px);
+  font-size: 0.78rem;
+}
+
+.cameraAction:hover,
+.galleryAction:hover,
+.overlayAction:hover {
+  transform: translateY(-1px);
+}
+
+.actionInput {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
 .removeBtn {
   align-self: flex-end;
   pointer-events: auto;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 7px 14px;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 12px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: var(--radius-md);
   color: #ffffff;
@@ -219,7 +279,7 @@
   cursor: pointer;
   transition: all var(--transition-fast);
   font-size: 0.78rem;
-  font-weight: 550;
+  font-weight: 700;
 }
 
 .removeBtn:hover {
@@ -272,7 +332,16 @@
     display: none;
   }
 
-  .mobileHintText {
-    display: block;
+  .uploadActions {
+    width: 100%;
+  }
+
+  .previewActions {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .removeBtn {
+    grid-column: 1 / -1;
+    width: 100%;
   }
 }
