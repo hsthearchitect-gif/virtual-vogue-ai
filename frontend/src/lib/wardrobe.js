@@ -107,6 +107,20 @@ function notifyWardrobeUpdated() {
   globalThis.dispatchEvent?.(new Event(WARDROBE_EVENT));
 }
 
+function inferGarmentCategory(sourceText = "") {
+  const text = sourceText.toLowerCase();
+
+  if (/\b(dress|gown|jumpsuit|romper|sari|saree|lehenga)\b/.test(text)) {
+    return "dresses";
+  }
+
+  if (/\b(pant|pants|trouser|trousers|jean|jeans|skirt|short|shorts|legging|leggings)\b/.test(text)) {
+    return "lower_body";
+  }
+
+  return "upper_body";
+}
+
 export function canUseWardrobe() {
   return typeof window !== "undefined" && Boolean(globalThis.indexedDB);
 }
@@ -143,7 +157,7 @@ export function subscribeToWardrobe(onItems, onError) {
   };
 }
 
-export async function uploadWardrobeGarment({ file, name, category }) {
+export async function uploadWardrobeGarment({ file, name, category: requestedCategory }) {
   if (!canUseWardrobe()) {
     throw new Error("This browser cannot save clothes locally.");
   }
@@ -159,6 +173,7 @@ export async function uploadWardrobeGarment({ file, name, category }) {
   }
 
   const garmentName = name?.trim() || file.name?.replace(/\.[^.]+$/, "") || "Saved garment";
+  const category = requestedCategory || inferGarmentCategory(`${garmentName} ${file.name || ""}`);
   const dataUrl = await normalizeGarmentImage(file);
   const garment = {
     category,

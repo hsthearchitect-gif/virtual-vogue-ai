@@ -5,11 +5,23 @@ import { outfits } from "@/lib/outfits";
 import WardrobeManager from "@/components/WardrobeManager";
 import styles from "./OutfitCarousel.module.css";
 
+const CLOTHING_TABS = {
+  virtual: {
+    label: "Virtual Clothes",
+    description: `${outfits.length} ready-to-try looks`
+  },
+  wardrobe: {
+    label: "User Clothes",
+    description: "Saved on this device"
+  }
+};
+
 export default function OutfitCarousel({
   disabled,
   onOutfitSelected
 }) {
   const [selectedKey, setSelectedKey] = useState(null);
+  const [activeTab, setActiveTab] = useState("virtual");
 
   const selectOutfit = useCallback(
     (index) => {
@@ -39,7 +51,8 @@ export default function OutfitCarousel({
   );
 
   const scrollCarousel = (direction) => {
-    const track = document.getElementById("outfit-carousel-track");
+    const trackId = activeTab === "virtual" ? "virtual-clothes-track" : "user-clothes-track";
+    const track = document.getElementById(trackId);
     if (!track) return;
 
     const offset = direction === "left" ? -280 : 280;
@@ -51,7 +64,7 @@ export default function OutfitCarousel({
       <div className={styles.header}>
         <div>
           <h3 className={styles.title}>Choose a Look</h3>
-          <p className={styles.count}>{outfits.length} catalog styles plus My Clothes</p>
+          <p className={styles.count}>{CLOTHING_TABS[activeTab].description}</p>
         </div>
         <div className={styles.arrows}>
           <button
@@ -93,53 +106,72 @@ export default function OutfitCarousel({
         </div>
       </div>
 
-      <WardrobeManager
-        disabled={disabled}
-        onGarmentSelected={selectWardrobeGarment}
-        selectedGarmentId={selectedKey?.startsWith("wardrobe:") ? selectedKey.replace("wardrobe:", "") : null}
-      />
-
-      <div className={styles.carouselWrapper}>
-        <div className={styles.track} id="outfit-carousel-track">
-          {outfits.map((outfit, index) => (
-            <button
-              className={`${styles.card} ${selectedKey === `catalog:${outfit.id}` ? styles.selected : ""}`}
-              onClick={() => selectOutfit(index)}
-              disabled={disabled}
-              id={`outfit-card-${outfit.id}`}
-              key={outfit.id}
-              type="button"
-            >
-              <div className={styles.imageWrapper}>
-                <img
-                  src={outfit.image}
-                  alt={outfit.name}
-                  className={styles.outfitImage}
-                  loading="lazy"
-                />
-                {selectedKey === `catalog:${outfit.id}` && (
-                  <div className={styles.checkmark} aria-hidden="true">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="12" r="12" fill="var(--accent)" />
-                      <path
-                        d="M7 12.5L10.5 16L17 9"
-                        stroke="var(--text-inverse)"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
-                  </div>
-                )}
-              </div>
-              <div className={styles.cardInfo}>
-                <p className={styles.outfitName}>{outfit.name}</p>
-                <p className={styles.outfitDesc}>{outfit.description}</p>
-              </div>
-            </button>
-          ))}
-        </div>
+      <div className={styles.tabBar} role="tablist" aria-label="Clothing source">
+        {Object.entries(CLOTHING_TABS).map(([tabKey, tab]) => (
+          <button
+            className={`${styles.tabButton} ${activeTab === tabKey ? styles.activeTab : ""}`}
+            disabled={disabled}
+            role="tab"
+            aria-selected={activeTab === tabKey}
+            onClick={() => setActiveTab(tabKey)}
+            type="button"
+            key={tabKey}
+          >
+            {tab.label}
+          </button>
+        ))}
       </div>
+
+      {activeTab === "virtual" ? (
+        <div className={styles.carouselWrapper}>
+          <div className={styles.track} id="virtual-clothes-track">
+            {outfits.map((outfit, index) => (
+              <button
+                className={`${styles.card} ${selectedKey === `catalog:${outfit.id}` ? styles.selected : ""}`}
+                onClick={() => selectOutfit(index)}
+                disabled={disabled}
+                id={`outfit-card-${outfit.id}`}
+                key={outfit.id}
+                type="button"
+              >
+                <div className={styles.imageWrapper}>
+                  <img
+                    src={outfit.image}
+                    alt={outfit.name}
+                    className={styles.outfitImage}
+                    loading="lazy"
+                  />
+                  {selectedKey === `catalog:${outfit.id}` && (
+                    <div className={styles.checkmark} aria-hidden="true">
+                      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                        <circle cx="12" cy="12" r="12" fill="var(--accent)" />
+                        <path
+                          d="M7 12.5L10.5 16L17 9"
+                          stroke="var(--text-inverse)"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </div>
+                  )}
+                </div>
+                <div className={styles.cardInfo}>
+                  <p className={styles.outfitName}>{outfit.name}</p>
+                  <p className={styles.outfitDesc}>{outfit.description}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <WardrobeManager
+          disabled={disabled}
+          onGarmentSelected={selectWardrobeGarment}
+          selectedGarmentId={selectedKey?.startsWith("wardrobe:") ? selectedKey.replace("wardrobe:", "") : null}
+          trackId="user-clothes-track"
+        />
+      )}
     </div>
   );
 }

@@ -59,6 +59,48 @@
   cursor: not-allowed;
 }
 
+.tabBar {
+  width: min(100%, 430px);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 4px;
+}
+
+.tabButton {
+  min-height: 40px;
+  border: 0;
+  border-radius: calc(var(--radius-md) - 4px);
+  color: var(--text-secondary);
+  background: transparent;
+  cursor: pointer;
+  font-family: Outfit, sans-serif;
+  font-size: 0.82rem;
+  font-weight: 700;
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.tabButton:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.tabButton:disabled {
+  cursor: not-allowed;
+}
+
+.activeTab {
+  color: var(--text-inverse);
+  background: var(--accent);
+  box-shadow: 0 10px 24px rgba(212, 165, 116, 0.22);
+}
+
 .carouselWrapper {
   margin: var(--space-md) -10px 0;
   padding: 0 10px;
@@ -178,5 +220,9 @@
 
   .header {
     align-items: flex-start;
+  }
+
+  .tabBar {
+    width: 100%;
   }
 }

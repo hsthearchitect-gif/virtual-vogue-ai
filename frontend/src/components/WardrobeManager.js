@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   canUseWardrobe,
   deleteWardrobeGarment,
@@ -9,34 +9,39 @@ import {
 } from "@/lib/wardrobe";
 import styles from "./WardrobeManager.module.css";
 
-const CATEGORY_OPTIONS = [
-  { label: "Top / Jacket", value: "upper_body" },
-  { label: "Pants / Skirt", value: "lower_body" },
-  { label: "Dress", value: "dresses" }
-];
-
 function getGarmentName(file) {
-  return file?.name?.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ") || "";
+  const name = file?.name?.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ").trim();
+  return name || "Uploaded clothing";
+}
+
+function toSelectableGarment(garment) {
+  return {
+    category: garment.category,
+    dataUrl: garment.dataUrl,
+    description: "Saved wardrobe item",
+    garmentDescription: garment.garmentDescription,
+    id: garment.id,
+    image: garment.dataUrl,
+    name: garment.name,
+    source: "wardrobe"
+  };
 }
 
 export default function WardrobeManager({
   disabled,
   onGarmentSelected,
-  selectedGarmentId
+  selectedGarmentId,
+  trackId = "user-clothes-track"
 }) {
   const [items, setItems] = useState([]);
-  const [file, setFile] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState("");
-  const [name, setName] = useState("");
-  const [category, setCategory] = useState("upper_body");
   const [isSaving, setIsSaving] = useState(false);
   const [status, setStatus] = useState("");
   const [error, setError] = useState("");
-  const previewRef = useRef("");
 
   useEffect(() => {
     if (!canUseWardrobe()) {
       setItems([]);
+      setError("This browser cannot save clothes locally.");
       return undefined;
     }
 
@@ -48,86 +53,36 @@ export default function WardrobeManager({
     );
   }, []);
 
-  useEffect(() => {
-    return () => {
-      if (previewRef.current) URL.revokeObjectURL(previewRef.current);
-    };
-  }, []);
+  const saveFile = useCallback(
+    async (file) => {
+      if (!file || disabled || isSaving) return;
 
-  const handleFile = useCallback((nextFile) => {
-    if (!nextFile) return;
+      setIsSaving(true);
+      setError("");
+      setStatus("Adding clothing");
 
-    if (previewRef.current) URL.revokeObjectURL(previewRef.current);
+      try {
+        const saved = await uploadWardrobeGarment({
+          file,
+          name: getGarmentName(file)
+        });
 
-    const nextPreviewUrl = URL.createObjectURL(nextFile);
-    previewRef.current = nextPreviewUrl;
-    setPreviewUrl(nextPreviewUrl);
-    setFile(nextFile);
-    setName((currentName) => currentName || getGarmentName(nextFile));
-    setError("");
-    setStatus("");
-  }, []);
-
-  const clearDraft = useCallback(() => {
-    if (previewRef.current) {
-      URL.revokeObjectURL(previewRef.current);
-      previewRef.current = "";
-    }
-
-    setFile(null);
-    setPreviewUrl("");
-    setName("");
-    setCategory("upper_body");
-  }, []);
-
-  const saveGarment = useCallback(async () => {
-    if (!file || isSaving || disabled) return;
-
-    setIsSaving(true);
-    setError("");
-    setStatus("Saving garment");
-
-    try {
-      const saved = await uploadWardrobeGarment({
-        category,
-        file,
-        name
-      });
-
-      clearDraft();
-      setStatus("Saved to wardrobe");
-      onGarmentSelected({
-        category: saved.category,
-        description: "Saved wardrobe item",
-        garmentDescription: saved.garmentDescription,
-        id: saved.id,
-        image: saved.dataUrl,
-        name: saved.name,
-        source: "wardrobe",
-        dataUrl: saved.dataUrl
-      });
-    } catch (saveError) {
-      setError(saveError?.message || "Could not save garment.");
-      setStatus("");
-    } finally {
-      setIsSaving(false);
-    }
-  }, [category, clearDraft, disabled, file, isSaving, name, onGarmentSelected]);
+        setStatus("Added to User Clothes");
+        onGarmentSelected(toSelectableGarment(saved));
+      } catch (saveError) {
+        setError(saveError?.message || "Could not save garment.");
+        setStatus("");
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [disabled, isSaving, onGarmentSelected]
+  );
 
   const selectGarment = useCallback(
     (garment) => {
       if (disabled) return;
-
-      onGarmentSelected({
-        category: garment.category,
-        description: "Saved wardrobe item",
-        garmentDescription: garment.garmentDescription,
-        id: garment.id,
-        image: garment.dataUrl,
-        name: garment.name,
-        source: "wardrobe",
-        dataUrl: garment.dataUrl
-      });
+      onGarmentSelected(toSelectableGarment(garment));
     },
     [disabled, onGarmentSelected]
   );
@@ -138,6 +93,7 @@ export default function WardrobeManager({
       if (disabled) return;
 
       setError("");
+      setStatus("");
 
       try {
         await deleteWardrobeGarment(garment);
@@ -149,109 +105,58 @@ export default function WardrobeManager({
   );
 
   return (
-    <div className={`${styles.panel} ${disabled ? styles.disabled : ""}`}>
-      <div className={styles.panelHeader}>
-        <div>
-          <h4 className={styles.panelTitle}>My Clothes</h4>
-          <p className={styles.panelSubtitle}>Saved on this device</p>
-        </div>
-        <span className={styles.savedCount}>{items.length} saved</span>
+    <div className={`${styles.container} ${disabled ? styles.disabled : ""}`}>
+      <div className={styles.metaRow}>
+        <p className={styles.savedCount}>{items.length ? `${items.length} saved` : "No saved clothes yet"}</p>
+        {(status || error) && (
+          <p className={error ? styles.errorText : styles.statusText}>{error || status}</p>
+        )}
       </div>
 
-      <div className={styles.uploadGrid}>
-        <div className={styles.uploadControls}>
-          <div className={styles.fileActions}>
-            <label className={styles.primaryFileAction}>
-              Add by Camera
-              <input
-                className={styles.fileInput}
-                type="file"
-                accept="image/*,.heic,.heif"
-                capture="environment"
-                disabled={disabled || isSaving}
-                onChange={(event) => {
-                  handleFile(event.target.files?.[0]);
-                  event.target.value = "";
-                }}
-              />
-            </label>
-            <label className={styles.secondaryFileAction}>
-              Gallery
-              <input
-                className={styles.fileInput}
-                type="file"
-                accept="image/*,.heic,.heif"
-                disabled={disabled || isSaving}
-                onChange={(event) => {
-                  handleFile(event.target.files?.[0]);
-                  event.target.value = "";
-                }}
-              />
-            </label>
-          </div>
-
-          <input
-            className={styles.nameInput}
-            type="text"
-            value={name}
-            placeholder="Garment name"
-            disabled={disabled || isSaving}
-            onChange={(event) => setName(event.target.value)}
-          />
-
-          <select
-            className={styles.categorySelect}
-            value={category}
-            disabled={disabled || isSaving}
-            onChange={(event) => setCategory(event.target.value)}
+      <div className={styles.carouselWrapper}>
+        <div className={styles.track} id={trackId}>
+          <label
+            className={`${styles.card} ${styles.uploadCard}`}
+            aria-disabled={disabled || isSaving}
           >
-            {CATEGORY_OPTIONS.map((option) => (
-              <option value={option.value} key={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            <div className={styles.uploadImageWrapper}>
+              <span className={styles.uploadIcon} aria-hidden="true">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M12 16V5M12 5L8 9M12 5L16 9"
+                    stroke="currentColor"
+                    strokeWidth="1.9"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M5 15V18C5 18.6 5.4 19 6 19H18C18.6 19 19 18.6 19 18V15"
+                    stroke="currentColor"
+                    strokeWidth="1.9"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              </span>
+            </div>
+            <div className={styles.cardInfo}>
+              <p className={styles.outfitName}>{isSaving ? "Adding" : "Upload Clothing"}</p>
+              <p className={styles.outfitDesc}>JPG, PNG, WebP</p>
+            </div>
+            <input
+              className={styles.fileInput}
+              type="file"
+              accept="image/*,.heic,.heif"
+              disabled={disabled || isSaving}
+              onChange={(event) => {
+                saveFile(event.target.files?.[0]);
+                event.target.value = "";
+              }}
+            />
+          </label>
 
-          <div className={styles.saveRow}>
-            <button
-              className={styles.saveBtn}
-              type="button"
-              disabled={!file || disabled || isSaving}
-              onClick={saveGarment}
-            >
-              {isSaving ? "Saving" : "Save Clothing"}
-            </button>
-            {file && (
-              <button
-                className={styles.clearBtn}
-                type="button"
-                disabled={disabled || isSaving}
-                onClick={clearDraft}
-              >
-                Clear
-              </button>
-            )}
-          </div>
-        </div>
-
-        <div className={styles.previewBox}>
-          {previewUrl ? (
-            <img src={previewUrl} alt="Garment preview" className={styles.previewImg} />
-          ) : (
-            <span className={styles.previewPlaceholder}>Clothing preview</span>
-          )}
-        </div>
-      </div>
-
-      {(status || error) && (
-        <p className={error ? styles.errorText : styles.statusText}>{error || status}</p>
-      )}
-
-      {items.length > 0 ? (
-        <div className={styles.savedGrid}>
           {items.map((garment) => (
             <div
-              className={`${styles.savedCard} ${selectedGarmentId === garment.id ? styles.selected : ""}`}
+              className={`${styles.card} ${selectedGarmentId === garment.id ? styles.selected : ""}`}
               role="button"
               tabIndex={disabled ? -1 : 0}
               aria-disabled={disabled}
@@ -265,23 +170,40 @@ export default function WardrobeManager({
               }}
               key={garment.id}
             >
-              <img src={garment.dataUrl} alt={garment.name} className={styles.savedImage} />
-              <span className={styles.savedName}>{garment.name}</span>
-              <button
-                className={styles.deleteBtn}
-                type="button"
-                disabled={disabled}
-                onClick={(event) => removeGarment(event, garment)}
-                aria-label={`Delete ${garment.name}`}
-              >
-                Delete
-              </button>
+              <div className={styles.imageWrapper}>
+                <img src={garment.dataUrl} alt={garment.name} className={styles.outfitImage} />
+                {selectedGarmentId === garment.id && (
+                  <div className={styles.checkmark} aria-hidden="true">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="12" fill="var(--accent)" />
+                      <path
+                        d="M7 12.5L10.5 16L17 9"
+                        stroke="var(--text-inverse)"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
+                    </svg>
+                  </div>
+                )}
+                <button
+                  className={styles.deleteBtn}
+                  type="button"
+                  disabled={disabled}
+                  onClick={(event) => removeGarment(event, garment)}
+                  aria-label={`Delete ${garment.name}`}
+                >
+                  Delete
+                </button>
+              </div>
+              <div className={styles.cardInfo}>
+                <p className={styles.outfitName}>{garment.name}</p>
+                <p className={styles.outfitDesc}>User clothing</p>
+              </div>
             </div>
           ))}
         </div>
-      ) : (
-        <div className={styles.emptyNotice}>Upload a clothing photo to build your try-on wardrobe.</div>
-      )}
+      </div>
     </div>
   );
 }
