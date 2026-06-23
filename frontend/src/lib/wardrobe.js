@@ -1,37 +1,16 @@
 "use client";
 
-import {
-  addDoc,
-  collection,
-  deleteDoc,
-  doc,
-  onSnapshot,
-  orderBy,
-  query,
-  serverTimestamp
-} from "firebase/firestore";
-import {
-  deleteObject,
-  getBlob,
-  getDownloadURL,
-  ref,
-  uploadBytes
-} from "firebase/storage";
-import { db, isFirebaseConfigured, storage } from "@/lib/firebase";
-
+const DB_NAME = "virtual-vogue-wardrobe";
+const DB_VERSION = 1;
+const STORE_NAME = "garments";
+const WARDROBE_EVENT = "virtual-vogue-wardrobe-updated";
 const MAX_GARMENT_IMAGE_SIZE_MB = 20;
+const MAX_GARMENT_DIMENSION = 1400;
 const MOBILE_IMAGE_EXTENSIONS = /\.(heic|heif)$/i;
-const MAX_GARMENT_DIMENSION = 1600;
 
-function cleanFileName(name) {
-  return name
-    .toLowerCase()
-    .replace(/[^a-z0-9.]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 80);
-}
+let dbPromise = null;
 
-function createUploadId() {
+function createId() {
   if (typeof globalThis.crypto?.randomUUID === "function") {
     return globalThis.crypto.randomUUID();
   }
@@ -39,12 +18,42 @@ function createUploadId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
-function blobToDataUrl(blob) {
+function openWardrobeDb() {
+  if (dbPromise) return dbPromise;
+
+  dbPromise = new Promise((resolve, reject) => {
+    if (!globalThis.indexedDB) {
+      reject(new Error("This browser cannot save clothes locally."));
+      return;
+    }
+
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        const store = db.createObjectStore(STORE_NAME, { keyPath: "id" });
+        store.createIndex("createdAt", "createdAt");
+      }
+    };
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("Could not open local wardrobe."));
+  });
+
+  return dbPromise;
+}
+
+async function runStore(mode, action) {
+  const db = await openWardrobeDb();
+
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = (event) => resolve(event.target.result);
-    reader.onerror = () => reject(new Error("Could not read garment image."));
-    reader.readAsDataURL(blob);
+    const transaction = db.transaction(STORE_NAME, mode);
+    const store = transaction.objectStore(STORE_NAME);
+    const request = action(store);
+
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error || new Error("Wardrobe storage failed."));
   });
 }
 
@@ -57,16 +66,16 @@ function loadImage(url) {
   });
 }
 
-function canvasToJpegBlob(canvas) {
+function canvasToDataUrl(canvas) {
+  return canvas.toDataURL("image/jpeg", 0.88);
+}
+
+async function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
-    canvas.toBlob(
-      (blob) => {
-        if (blob) resolve(blob);
-        else reject(new Error("Could not prepare garment image."));
-      },
-      "image/jpeg",
-      0.9
-    );
+    const reader = new FileReader();
+    reader.onload = (event) => resolve(event.target.result);
+    reader.onerror = () => reject(new Error("Could not read garment image."));
+    reader.readAsDataURL(file);
   });
 }
 
@@ -86,60 +95,57 @@ async function normalizeGarmentImage(file) {
     canvas.height = height;
     context.drawImage(image, 0, 0, width, height);
 
-    return {
-      blob: await canvasToJpegBlob(canvas),
-      contentType: "image/jpeg",
-      fileName: `${file.name?.replace(/\.[^.]+$/, "") || "garment"}.jpg`
-    };
+    return canvasToDataUrl(canvas);
   } catch {
-    return {
-      blob: file,
-      contentType: file.type || "image/jpeg",
-      fileName: file.name || "garment.jpg"
-    };
+    return fileToDataUrl(file);
   } finally {
     URL.revokeObjectURL(objectUrl);
   }
 }
 
-export function canUseWardrobe() {
-  return isFirebaseConfigured && db && storage;
+function notifyWardrobeUpdated() {
+  globalThis.dispatchEvent?.(new Event(WARDROBE_EVENT));
 }
 
-export function subscribeToWardrobe(user, onItems, onError) {
-  if (!canUseWardrobe() || !user?.uid) {
+export function canUseWardrobe() {
+  return typeof window !== "undefined" && Boolean(globalThis.indexedDB);
+}
+
+export async function getWardrobeGarments() {
+  const items = await runStore("readonly", (store) => store.getAll());
+  return items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+}
+
+export function subscribeToWardrobe(onItems, onError) {
+  if (!canUseWardrobe()) {
     onItems([]);
     return () => {};
   }
 
-  const garmentsQuery = query(
-    collection(db, "users", user.uid, "garments"),
-    orderBy("createdAt", "desc")
-  );
+  let isActive = true;
 
-  return onSnapshot(
-    garmentsQuery,
-    (snapshot) => {
-      onItems(
-        snapshot.docs.map((garmentDoc) => ({
-          id: garmentDoc.id,
-          ...garmentDoc.data()
-        }))
-      );
-    },
-    (error) => {
-      onError?.(error);
-    }
-  );
+  const load = () => {
+    getWardrobeGarments()
+      .then((items) => {
+        if (isActive) onItems(items);
+      })
+      .catch((error) => {
+        if (isActive) onError?.(error);
+      });
+  };
+
+  load();
+  globalThis.addEventListener(WARDROBE_EVENT, load);
+
+  return () => {
+    isActive = false;
+    globalThis.removeEventListener(WARDROBE_EVENT, load);
+  };
 }
 
-export async function uploadWardrobeGarment({ user, file, name, category }) {
+export async function uploadWardrobeGarment({ file, name, category }) {
   if (!canUseWardrobe()) {
-    throw new Error("Google login and wardrobe storage are not configured yet.");
-  }
-
-  if (!user?.uid) {
-    throw new Error("Sign in before saving clothes.");
+    throw new Error("This browser cannot save clothes locally.");
   }
 
   const isImage = file?.type?.startsWith("image/") || MOBILE_IMAGE_EXTENSIONS.test(file?.name || "");
@@ -152,59 +158,29 @@ export async function uploadWardrobeGarment({ user, file, name, category }) {
     throw new Error(`Clothing image is too large. Max ${MAX_GARMENT_IMAGE_SIZE_MB}MB.`);
   }
 
-  const uploadId = createUploadId();
-  const normalized = await normalizeGarmentImage(file);
-  const safeName = cleanFileName(normalized.fileName || `${uploadId}.jpg`);
-  const storagePath = `users/${user.uid}/wardrobe/${uploadId}-${safeName}`;
-  const storageReference = ref(storage, storagePath);
-
-  await uploadBytes(storageReference, normalized.blob, {
-    contentType: normalized.contentType,
-    customMetadata: {
-      ownerId: user.uid,
-      source: "virtual-vogue-ai"
-    }
-  });
-
-  const imageUrl = await getDownloadURL(storageReference);
   const garmentName = name?.trim() || file.name?.replace(/\.[^.]+$/, "") || "Saved garment";
-  const garmentDescription = `${garmentName} uploaded by the user`;
-
-  const garmentRef = await addDoc(collection(db, "users", user.uid, "garments"), {
+  const dataUrl = await normalizeGarmentImage(file);
+  const garment = {
     category,
-    createdAt: serverTimestamp(),
-    garmentDescription,
-    imageUrl,
+    createdAt: Date.now(),
+    dataUrl,
+    garmentDescription: `${garmentName} uploaded clothing item`,
+    id: createId(),
+    imageUrl: dataUrl,
     name: garmentName,
     originalFileName: file.name || "",
-    storagePath
-  });
-
-  return {
-    category,
-    garmentDescription,
-    id: garmentRef.id,
-    imageUrl,
-    name: garmentName,
-    storagePath
+    source: "wardrobe"
   };
+
+  await runStore("readwrite", (store) => store.put(garment));
+  notifyWardrobeUpdated();
+
+  return garment;
 }
 
-export async function deleteWardrobeGarment(user, garment) {
-  if (!canUseWardrobe() || !user?.uid || !garment?.id) return;
+export async function deleteWardrobeGarment(garment) {
+  if (!canUseWardrobe() || !garment?.id) return;
 
-  await deleteDoc(doc(db, "users", user.uid, "garments", garment.id));
-
-  if (garment.storagePath) {
-    await deleteObject(ref(storage, garment.storagePath)).catch(() => {});
-  }
-}
-
-export async function storagePathToDataUrl(storagePath) {
-  if (!canUseWardrobe() || !storagePath) {
-    throw new Error("Saved garment storage is not available.");
-  }
-
-  const blob = await getBlob(ref(storage, storagePath));
-  return blobToDataUrl(blob);
+  await runStore("readwrite", (store) => store.delete(garment.id));
+  notifyWardrobeUpdated();
 }

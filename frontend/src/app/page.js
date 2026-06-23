@@ -1,14 +1,11 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import AuthPanel from "@/components/AuthPanel";
 import ImageUploader from "@/components/ImageUploader";
 import LoadingSpinner from "@/components/LoadingSpinner";
 import OutfitCarousel from "@/components/OutfitCarousel";
 import ResultDisplay from "@/components/ResultDisplay";
 import { generateTryOn } from "@/lib/api";
-import { useFirebaseAuth } from "@/lib/useFirebaseAuth";
-import { storagePathToDataUrl } from "@/lib/wardrobe";
 import styles from "./page.module.css";
 
 async function imageUrlToDataUrl(url) {
@@ -29,14 +26,6 @@ async function imageUrlToDataUrl(url) {
 }
 
 export default function Home() {
-  const {
-    authError,
-    authReady,
-    isAuthConfigured,
-    signInWithGoogle,
-    signOutUser,
-    user
-  } = useFirebaseAuth();
   const [humanImage, setHumanImage] = useState(null);
   const [selectedOutfit, setSelectedOutfit] = useState(null);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -68,9 +57,7 @@ export default function Home() {
     setLoadingAttempt(0);
 
     try {
-      const garmentImage = selectedOutfit.storagePath
-        ? await storagePathToDataUrl(selectedOutfit.storagePath).catch(() => imageUrlToDataUrl(selectedOutfit.image))
-        : await imageUrlToDataUrl(selectedOutfit.image);
+      const garmentImage = selectedOutfit.dataUrl || await imageUrlToDataUrl(selectedOutfit.image);
 
       const response = await generateTryOn({
         humanImage,
@@ -130,14 +117,6 @@ export default function Home() {
         </div>
         <div className={styles.headerMeta}>
           <span className={styles.catalogPill}>8 outfits</span>
-          <AuthPanel
-            authError={authError}
-            authReady={authReady}
-            isAuthConfigured={isAuthConfigured}
-            onSignIn={signInWithGoogle}
-            onSignOut={signOutUser}
-            user={user}
-          />
         </div>
       </header>
 
@@ -167,9 +146,7 @@ export default function Home() {
             </div>
             <OutfitCarousel
               disabled={isGenerating}
-              isAuthConfigured={isAuthConfigured}
               onOutfitSelected={handleOutfitSelected}
-              user={user}
             />
           </section>
         </div>

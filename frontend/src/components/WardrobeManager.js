@@ -21,10 +21,8 @@ function getGarmentName(file) {
 
 export default function WardrobeManager({
   disabled,
-  isAuthConfigured,
   onGarmentSelected,
-  selectedGarmentId,
-  user
+  selectedGarmentId
 }) {
   const [items, setItems] = useState([]);
   const [file, setFile] = useState(null);
@@ -37,19 +35,18 @@ export default function WardrobeManager({
   const previewRef = useRef("");
 
   useEffect(() => {
-    if (!user?.uid || !canUseWardrobe()) {
+    if (!canUseWardrobe()) {
       setItems([]);
       return undefined;
     }
 
     return subscribeToWardrobe(
-      user,
       setItems,
       (subscriptionError) => {
         setError(subscriptionError?.message || "Could not load wardrobe.");
       }
     );
-  }, [user]);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -84,7 +81,7 @@ export default function WardrobeManager({
   }, []);
 
   const saveGarment = useCallback(async () => {
-    if (!file || !user?.uid || isSaving || disabled) return;
+    if (!file || isSaving || disabled) return;
 
     setIsSaving(true);
     setError("");
@@ -94,8 +91,7 @@ export default function WardrobeManager({
       const saved = await uploadWardrobeGarment({
         category,
         file,
-        name,
-        user
+        name
       });
 
       clearDraft();
@@ -105,10 +101,10 @@ export default function WardrobeManager({
         description: "Saved wardrobe item",
         garmentDescription: saved.garmentDescription,
         id: saved.id,
-        image: saved.imageUrl,
+        image: saved.dataUrl,
         name: saved.name,
         source: "wardrobe",
-        storagePath: saved.storagePath
+        dataUrl: saved.dataUrl
       });
     } catch (saveError) {
       setError(saveError?.message || "Could not save garment.");
@@ -116,7 +112,7 @@ export default function WardrobeManager({
     } finally {
       setIsSaving(false);
     }
-  }, [category, clearDraft, disabled, file, isSaving, name, onGarmentSelected, user]);
+  }, [category, clearDraft, disabled, file, isSaving, name, onGarmentSelected]);
 
   const selectGarment = useCallback(
     (garment) => {
@@ -127,10 +123,10 @@ export default function WardrobeManager({
         description: "Saved wardrobe item",
         garmentDescription: garment.garmentDescription,
         id: garment.id,
-        image: garment.imageUrl,
+        image: garment.dataUrl,
         name: garment.name,
         source: "wardrobe",
-        storagePath: garment.storagePath
+        dataUrl: garment.dataUrl
       });
     },
     [disabled, onGarmentSelected]
@@ -139,34 +135,29 @@ export default function WardrobeManager({
   const removeGarment = useCallback(
     async (event, garment) => {
       event.stopPropagation();
-      if (disabled || !user?.uid) return;
+      if (disabled) return;
 
       setError("");
 
       try {
-        await deleteWardrobeGarment(user, garment);
+        await deleteWardrobeGarment(garment);
       } catch (deleteError) {
         setError(deleteError?.message || "Could not delete garment.");
       }
     },
-    [disabled, user]
+    [disabled]
   );
-
-  if (!isAuthConfigured) {
-    return null;
-  }
-
-  if (!user) {
-    return (
-      <div className={styles.noticePanel}>
-        <p className={styles.noticeTitle}>Sign in to save your wardrobe</p>
-        <p className={styles.noticeText}>Upload clothes once, then reuse them for future try-ons.</p>
-      </div>
-    );
-  }
 
   return (
     <div className={`${styles.panel} ${disabled ? styles.disabled : ""}`}>
+      <div className={styles.panelHeader}>
+        <div>
+          <h4 className={styles.panelTitle}>My Clothes</h4>
+          <p className={styles.panelSubtitle}>Saved on this device</p>
+        </div>
+        <span className={styles.savedCount}>{items.length} saved</span>
+      </div>
+
       <div className={styles.uploadGrid}>
         <div className={styles.uploadControls}>
           <div className={styles.fileActions}>
@@ -256,11 +247,6 @@ export default function WardrobeManager({
         <p className={error ? styles.errorText : styles.statusText}>{error || status}</p>
       )}
 
-      <div className={styles.savedHeader}>
-        <h4 className={styles.savedTitle}>Your Wardrobe</h4>
-        <span className={styles.savedCount}>{items.length} saved</span>
-      </div>
-
       {items.length > 0 ? (
         <div className={styles.savedGrid}>
           {items.map((garment) => (
@@ -279,7 +265,7 @@ export default function WardrobeManager({
               }}
               key={garment.id}
             >
-              <img src={garment.imageUrl} alt={garment.name} className={styles.savedImage} />
+              <img src={garment.dataUrl} alt={garment.name} className={styles.savedImage} />
               <span className={styles.savedName}>{garment.name}</span>
               <button
                 className={styles.deleteBtn}
@@ -294,7 +280,7 @@ export default function WardrobeManager({
           ))}
         </div>
       ) : (
-        <div className={styles.emptyNotice}>No saved clothes yet.</div>
+        <div className={styles.emptyNotice}>Upload a clothing photo to build your try-on wardrobe.</div>
       )}
     </div>
   );

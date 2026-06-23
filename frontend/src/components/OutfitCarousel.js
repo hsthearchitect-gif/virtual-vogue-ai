@@ -7,9 +7,7 @@ import styles from "./OutfitCarousel.module.css";
 
 export default function OutfitCarousel({
   disabled,
-  isAuthConfigured,
-  onOutfitSelected,
-  user
+  onOutfitSelected
 }) {
   const [selectedKey, setSelectedKey] = useState(null);
 
@@ -53,11 +51,7 @@ export default function OutfitCarousel({
       <div className={styles.header}>
         <div>
           <h3 className={styles.title}>Choose a Look</h3>
-          <p className={styles.count}>
-            {isAuthConfigured
-              ? `${outfits.length} catalog styles plus your saved clothes`
-              : `${outfits.length} catalog styles available`}
-          </p>
+          <p className={styles.count}>{outfits.length} catalog styles plus My Clothes</p>
         </div>
         <div className={styles.arrows}>
           <button
@@ -101,10 +95,8 @@ export default function OutfitCarousel({
 
       <WardrobeManager
         disabled={disabled}
-        isAuthConfigured={isAuthConfigured}
         onGarmentSelected={selectWardrobeGarment}
         selectedGarmentId={selectedKey?.startsWith("wardrobe:") ? selectedKey.replace("wardrobe:", "") : null}
-        user={user}
       />
 
       <div className={styles.carouselWrapper}>
