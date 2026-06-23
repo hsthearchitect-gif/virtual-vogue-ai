@@ -1,0 +1,284 @@
+.panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.035);
+  padding: 14px;
+}
+
+.disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.uploadGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 124px;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.uploadControls {
+  display: grid;
+  gap: 8px;
+}
+
+.fileActions,
+.saveRow {
+  display: grid;
+  grid-template-columns: 1fr 0.72fr;
+  gap: 8px;
+}
+
+.primaryFileAction,
+.secondaryFileAction,
+.saveBtn,
+.clearBtn {
+  min-height: 40px;
+  border-radius: var(--radius-md);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    transform var(--transition-fast),
+    border-color var(--transition-fast),
+    background var(--transition-fast);
+  font-family: Outfit, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.primaryFileAction,
+.secondaryFileAction {
+  position: relative;
+  overflow: hidden;
+}
+
+.primaryFileAction {
+  color: var(--text-inverse);
+  border: 1px solid rgba(212, 165, 116, 0.55);
+  background: linear-gradient(135deg, var(--accent-light), var(--accent));
+}
+
+.secondaryFileAction,
+.clearBtn {
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.saveBtn {
+  border: none;
+  color: var(--text-inverse);
+  background: var(--accent);
+}
+
+.saveBtn:disabled,
+.clearBtn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.primaryFileAction:hover,
+.secondaryFileAction:hover,
+.saveBtn:hover:not(:disabled),
+.clearBtn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.fileInput {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.nameInput,
+.categorySelect {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  background: rgba(15, 15, 15, 0.68);
+  padding: 0 11px;
+  outline: none;
+  font-size: 0.82rem;
+}
+
+.nameInput:focus,
+.categorySelect:focus {
+  border-color: var(--accent);
+}
+
+.categorySelect option {
+  background: #1b1b1b;
+  color: var(--text-primary);
+}
+
+.previewBox {
+  min-height: 132px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(15, 15, 15, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.previewImg,
+.savedImage {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.previewPlaceholder {
+  color: var(--text-muted);
+  padding: 10px;
+  text-align: center;
+  font-size: 0.74rem;
+}
+
+.statusText,
+.errorText {
+  margin-top: 9px;
+  font-size: 0.76rem;
+}
+
+.statusText {
+  color: #b8ffd0;
+}
+
+.errorText {
+  color: #fca5a5;
+}
+
+.savedHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.savedTitle {
+  color: var(--text-primary);
+  font-family: Outfit, sans-serif;
+  font-size: 0.92rem;
+  font-weight: 700;
+}
+
+.savedCount {
+  color: var(--text-muted);
+  font-size: 0.72rem;
+}
+
+.savedGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(126px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.savedCard {
+  min-width: 0;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  color: inherit;
+  background: var(--bg-card);
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+  position: relative;
+  text-align: left;
+  transition:
+    border-color var(--transition-fast),
+    transform var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.savedCard:hover {
+  border-color: var(--border-hover);
+  transform: translateY(-2px);
+}
+
+.savedCard:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.savedCard[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+.selected {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent), var(--shadow-glow);
+}
+
+.savedImage {
+  aspect-ratio: 4 / 5;
+}
+
+.savedName {
+  color: var(--text-primary);
+  display: block;
+  min-height: 38px;
+  padding: 8px 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.deleteBtn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-sm);
+  color: #ffffff;
+  background: rgba(15, 15, 15, 0.78);
+  padding: 5px 7px;
+  cursor: pointer;
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.deleteBtn:hover {
+  background: rgba(200, 50, 50, 0.82);
+}
+
+.emptyNotice {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 12px;
+  text-align: center;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+@media (max-width: 760px) {
+  .uploadGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .previewBox {
+    min-height: 180px;
+  }
+}
+
+@media (max-width: 480px) {
+  .fileActions,
+  .saveRow {
+    grid-template-columns: 1fr;
+  }
+}

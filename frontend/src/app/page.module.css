@@ -45,7 +45,10 @@
 .headerMeta {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 10px;
+  min-width: 0;
 }
 
 .catalogPill {
@@ -276,6 +279,11 @@
 
   .tryNowBtn {
     width: 100%;
+  }
+
+  .headerMeta {
+    width: 100%;
+    justify-content: flex-start;
   }
 }
 

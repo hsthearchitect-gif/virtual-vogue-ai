@@ -2,26 +2,42 @@
 
 import { useCallback, useState } from "react";
 import { outfits } from "@/lib/outfits";
+import WardrobeManager from "@/components/WardrobeManager";
 import styles from "./OutfitCarousel.module.css";
 
-export default function OutfitCarousel({ onOutfitSelected, disabled }) {
-  const [selectedIndex, setSelectedIndex] = useState(null);
+export default function OutfitCarousel({
+  disabled,
+  isAuthConfigured,
+  onOutfitSelected,
+  user
+}) {
+  const [selectedKey, setSelectedKey] = useState(null);
 
   const selectOutfit = useCallback(
     (index) => {
       if (disabled) return;
 
-      setSelectedIndex(index);
       const outfit = outfits[index];
+      setSelectedKey(`catalog:${outfit.id}`);
 
       onOutfitSelected({
+        id: outfit.id,
         image: outfit.image,
         description: outfit.garmentDescription,
         category: outfit.category,
-        name: outfit.name
+        name: outfit.name,
+        source: "catalog"
       });
     },
     [disabled, onOutfitSelected]
+  );
+
+  const selectWardrobeGarment = useCallback(
+    (garment) => {
+      setSelectedKey(`wardrobe:${garment.id}`);
+      onOutfitSelected(garment);
+    },
+    [onOutfitSelected]
   );
 
   const scrollCarousel = (direction) => {
@@ -37,7 +53,7 @@ export default function OutfitCarousel({ onOutfitSelected, disabled }) {
       <div className={styles.header}>
         <div>
           <h3 className={styles.title}>Choose a Look</h3>
-          <p className={styles.count}>{outfits.length} styles available</p>
+          <p className={styles.count}>{outfits.length} catalog styles plus your saved clothes</p>
         </div>
         <div className={styles.arrows}>
           <button
@@ -79,11 +95,19 @@ export default function OutfitCarousel({ onOutfitSelected, disabled }) {
         </div>
       </div>
 
+      <WardrobeManager
+        disabled={disabled}
+        isAuthConfigured={isAuthConfigured}
+        onGarmentSelected={selectWardrobeGarment}
+        selectedGarmentId={selectedKey?.startsWith("wardrobe:") ? selectedKey.replace("wardrobe:", "") : null}
+        user={user}
+      />
+
       <div className={styles.carouselWrapper}>
         <div className={styles.track} id="outfit-carousel-track">
           {outfits.map((outfit, index) => (
             <button
-              className={`${styles.card} ${selectedIndex === index ? styles.selected : ""}`}
+              className={`${styles.card} ${selectedKey === `catalog:${outfit.id}` ? styles.selected : ""}`}
               onClick={() => selectOutfit(index)}
               disabled={disabled}
               id={`outfit-card-${outfit.id}`}
@@ -97,7 +121,7 @@ export default function OutfitCarousel({ onOutfitSelected, disabled }) {
                   className={styles.outfitImage}
                   loading="lazy"
                 />
-                {selectedIndex === index && (
+                {selectedKey === `catalog:${outfit.id}` && (
                   <div className={styles.checkmark} aria-hidden="true">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                       <circle cx="12" cy="12" r="12" fill="var(--accent)" />
