@@ -11,7 +11,7 @@ export default function AuthPanel({
   user
 }) {
   if (!isAuthConfigured) {
-    return <span className={styles.setupPill}>Login setup needed</span>;
+    return null;
   }
 
   if (!authReady) {

@@ -53,7 +53,11 @@ export default function OutfitCarousel({
       <div className={styles.header}>
         <div>
           <h3 className={styles.title}>Choose a Look</h3>
-          <p className={styles.count}>{outfits.length} catalog styles plus your saved clothes</p>
+          <p className={styles.count}>
+            {isAuthConfigured
+              ? `${outfits.length} catalog styles plus your saved clothes`
+              : `${outfits.length} catalog styles available`}
+          </p>
         </div>
         <div className={styles.arrows}>
           <button

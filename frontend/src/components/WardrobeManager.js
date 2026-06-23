@@ -153,21 +153,14 @@ export default function WardrobeManager({
   );
 
   if (!isAuthConfigured) {
-    return (
-      <div className={styles.panel}>
-        <div className={styles.emptyNotice}>
-          Add Firebase env vars to enable Google login and saved wardrobes.
-        </div>
-      </div>
-    );
+    return null;
   }
 
   if (!user) {
     return (
-      <div className={styles.panel}>
-        <div className={styles.emptyNotice}>
-          Sign in with Google to upload clothes and keep a personal wardrobe.
-        </div>
+      <div className={styles.noticePanel}>
+        <p className={styles.noticeTitle}>Sign in to save your wardrobe</p>
+        <p className={styles.noticeText}>Upload clothes once, then reuse them for future try-ons.</p>
       </div>
     );
   }
